@@ -72,5 +72,6 @@ func TestIntervalBadTag(t *testing.T) {
 
 func TestIntervalSorting(t *testing.T) {
 	// Test by Start values
+
 	// Test equal Start values but different Ends
 }

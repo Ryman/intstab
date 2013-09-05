@@ -2,8 +2,7 @@
 package intstab
 
 import (
-	"fmt"
-	"log"
+	_ "log"
 	"math"
 	"sort"
 )
@@ -11,13 +10,6 @@ import (
 /*
 *	Public
  */
-type Interval struct {
-	Start uint16
-	End   uint16
-	Tag   interface{}
-}
-type IntervalSlice []Interval
-
 type IntervalStabber interface {
 	Intersect(uint16) ([]Interval, bool)
 }
@@ -44,21 +36,8 @@ func NewIntervalStabber(intervals ...Interval) (IntervalStabber, error) {
 *	Private
  */
 type intStab struct {
-	intervals IntervalSlice
-	smaller   []IntervalSlice
-}
-
-func (i Interval) isValid() (ok bool, err error) {
-	if i.Start > i.End {
-		err = fmt.Errorf("Invalid interval: %d should be <= %d",
-			i.Start, i.End)
-	} else if i.Tag == nil {
-		err = fmt.Errorf("Invalid Interval: Missing Tag")
-	} else {
-		ok = true
-	}
-
-	return
+	intervals map[int]uniqueInterval
+	smaller   []uniqueIntervalSlice
 }
 
 // Use a sweep line to build the tree in O(n)
@@ -67,14 +46,14 @@ func (ts *intStab) precompute() {
 	ts.precomputeSmaller()
 
 	n := len(ts.intervals)
-	event := make(map[uint16]IntervalSlice, n*2)
+	event := make(map[uint16][]uniqueInterval, n*2)
 	list := make(IntervalSlice, n+1)
 
 	// Sort by starting values
-	sort.Sort(ts.intervals)
+	//sort.Sort(ts.intervals)
 	for _, a := range ts.intervals {
-		event[a.End] = append(event[a.End], a)
-		event[a.Start] = append(event[a.Start], a)
+		event[a.interval.End] = append(event[a.interval.End], a)
+		event[a.interval.Start] = append(event[a.interval.Start], a)
 	}
 
 	for q := 0; q < n; q++ {
@@ -88,65 +67,47 @@ func (ts *intStab) precompute() {
 	All the intervals with left endpoint l, except one such longest
 	interval a, are stored in a list called Smaller(a) (see Figure 1).
 	These lists are sorted by length in descending order, get a link to
-	a, and every element in them is removed from I.
-*/
+	a, and every element in them is removed from I. */
 func (ts *intStab) precomputeSmaller() {
-	ts.smaller = make([]IntervalSlice, math.MaxUint16)
-	sm := ts.smaller
+	sm := make([]uniqueIntervalSlice, math.MaxUint16)
 
 	//log.Printf("Intervals %v", ts.intervals)
 	for _, a := range ts.intervals {
-		sm[a.Start] = append(sm[a.Start], a)
+		sm[a.interval.Start] = append(sm[a.interval.Start], a)
 	}
 
 	// sort Q elements by length
 	for _, arr := range sm {
 		if len(arr) > 1 {
 			sort.Sort(arr)
-		}
-
-		if len(arr) > 0 {
-			// remove the last one
+			/* Debug
 			log.Print(arr)
-			log.Printf("Val %v", arr[len(arr)-1])
-			//arr[len(arr)-1] = nil
+			log.Printf("Val %v", arr[len(arr)-1]) */
+			// remove the longest one (it should be the last one)
 			arr = arr[:len(arr)-1]
-			log.Print(arr)
 
 			// Remove each remaining item from the intervals map
 			for _, x := range arr {
-				// Remove from ts.intervals
-				log.Print("Should remove ", x)
+				delete(ts.intervals, x.id)
 			}
+		} else if len(arr) == 1 {
+			// There was only one, it's the longest so just remove and ignore
+			arr = arr[:0]
 		}
 	}
-}
 
-/* sort.Interface methods for []Interval */
-func (i IntervalSlice) Len() int {
-	return len(i)
+	ts.smaller = sm
 }
-
-func (i IntervalSlice) Swap(a, b int) {
-	i[a], i[b] = i[b], i[a]
-}
-
-// for two intervals a and b, it holds a < b
-// if la < lb or (la = lb ∧ ra ≤ rb).
-// li = left (Start), ri = right (End)
-func (i IntervalSlice) Less(a, b int) bool {
-	return i[a].Start < i[b].Start ||
-		(i[a].Start == i[b].Start && i[a].End <= i[b].End)
-}
-
-/* end sort.Interface methods */
 
 func (ts *intStab) push(intervals IntervalSlice) (err error) {
-	for _, val := range intervals {
+	ts.intervals = make(map[int]uniqueInterval, len(intervals))
+
+	for id, val := range intervals {
 		if _, err = val.isValid(); err != nil {
 			return
 		}
-		ts.intervals = append(ts.intervals, val)
+
+		ts.intervals[id] = uniqueInterval{val, id}
 	}
 
 	ts.precompute()
