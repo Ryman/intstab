@@ -6,7 +6,7 @@ import (
 
 func TestIntStabInit(t *testing.T) {
 	// Test intervals
-	intervals := []Interval{{4, 15, "First"}, {34, 72, "Second"}}
+	intervals := IntervalSlice{{4, 15, "First"}, {34, 72, "Second"}}
 
 	ts, err := NewIntervalStabber(intervals...)
 	if err != nil {
@@ -24,10 +24,13 @@ func TestIntStabInit(t *testing.T) {
 
 func TestIntervalMultipleResults(t *testing.T) {
 	// Test intervals
-	intervals := []Interval{
+	intervals := IntervalSlice{
 		{4, 15, "First"},
 		{50, 72, "Second"},
 		{34, 90, "Third"},
+		{34, 45, "Fourth"},
+		{34, 40, "Fifth"},
+		{34, 34, "Sixth"},
 	}
 
 	ts, err := NewIntervalStabber(intervals...)
@@ -49,7 +52,7 @@ func TestIntervalMultipleResults(t *testing.T) {
 
 func TestIntervalBadRange(t *testing.T) {
 	// Test intervals
-	intervals := []Interval{{4, 15, "First"}, {340, 72, "Second"}}
+	intervals := IntervalSlice{{4, 15, "First"}, {340, 72, "Second"}}
 
 	_, err := NewIntervalStabber(intervals...)
 	if err == nil {
@@ -59,10 +62,15 @@ func TestIntervalBadRange(t *testing.T) {
 
 func TestIntervalBadTag(t *testing.T) {
 	// Test intervals
-	intervals := []Interval{{4, 15, "First"}, {34, 72, nil}}
+	intervals := IntervalSlice{{4, 15, "First"}, {34, 72, nil}}
 
 	_, err := NewIntervalStabber(intervals...)
 	if err == nil {
 		t.Fatalf("Should not have accepted nil Tag for interval")
 	}
+}
+
+func TestIntervalSorting(t *testing.T) {
+	// Test by Start values
+	// Test equal Start values but different Ends
 }
