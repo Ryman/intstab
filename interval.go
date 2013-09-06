@@ -12,7 +12,7 @@ type Interval struct {
 	End   uint16
 	Tag   interface{}
 }
-type IntervalSlice []Interval
+type IntervalSlice []*Interval
 
 // for two intervals a and b, it holds a < b
 // if la < lb or (la = lb ∧ ra ≤ rb).
@@ -32,16 +32,20 @@ func (i IntervalSlice) Swap(a, b int) {
 }
 
 func (i IntervalSlice) Less(a, b int) bool {
-	return i[a].Less(&i[b])
+	return i[a].Less(i[b])
 }
 
 /* end sort.Interface methods */
+
+func (i Interval) Stab(q uint16) bool {
+	return i.Start <= q && q <= i.End
+}
 
 /*
 *	Private
  */
 type uniqueInterval struct {
-	interval Interval
+	interval *Interval
 	id       int
 }
 
@@ -59,7 +63,21 @@ func (i Interval) isValid() (ok bool, err error) {
 }
 
 // TODO: Probably a more idomatic way to do this
-type uniqueIntervalSlice []uniqueInterval
+type uniqueIntervalSlice []*uniqueInterval
+
+func (a *uniqueInterval) Less(b *uniqueInterval) bool {
+	// If they are equal, then we should also order by uniqueid
+	// That will help ensure output maintains input order for
+	// ranges that are the same
+	aS := a.interval.Start
+	aE := a.interval.End
+	bS := b.interval.Start
+	bE := b.interval.End
+	return aS < bS ||
+		(aS == bS &&
+			(aE < bE || (aE == bE && a.id < b.id)))
+	// This is dumb
+}
 
 /* sort.Interface methods for []Interval */
 func (i uniqueIntervalSlice) Len() int {
@@ -74,7 +92,11 @@ func (i uniqueIntervalSlice) Swap(a, b int) {
 // if la < lb or (la = lb ∧ ra ≤ rb).
 // li = left (Start), ri = right (End)
 func (i uniqueIntervalSlice) Less(a, b int) bool {
-	return i[a].interval.Less(&i[b].interval)
+	return i[a].Less(i[b])
 }
 
 /* end sort.Interface methods */
+
+func (i uniqueInterval) Stab(q uint16) bool {
+	return i.interval.Stab(q)
+}
