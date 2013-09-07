@@ -178,7 +178,8 @@ func TestGarbageCreation(t *testing.T) {
 		}
 	})
 
-	//if (allocs > len(results))
 	t.Log("Allocs per run (avg): ", allocs)
-	t.Fatal()
+	if allocs > 2.5 {
+		t.Fatal("Too many allocs, be sure to disable logging for real builds")
+	}
 }

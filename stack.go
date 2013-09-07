@@ -1,27 +1,30 @@
 package intstab
 
-type UniqueIntervalStack interface {
-	Push(*uniqueInterval)
-	Pop() *uniqueInterval
+type Stack interface {
+	Push(interface{})
+	Pop() interface{}
 	Len() int
 }
 
-func NewStack() UniqueIntervalStack {
-	return new(sliceStack)
+func NewStack() Stack {
+	return new(PooledSliceStack)
 }
 
 /*
 *	Stack backed by slices from a leaky pool
 *   http://golang.org/doc/effective_go.html#leaky_buffer
+* 	(The leaky buffer gave 33% perf improvement for test usage)
  */
-type sliceStack struct {
-	data uniqueIntervalSlice
+type poolElement interface{}
+type poolElementSlice []poolElement
+type PooledSliceStack struct {
+	data poolElementSlice
 }
 
 // default to 100 buffers, could probably reduce this
-var freeList = make(chan uniqueIntervalSlice, 100)
+var freeList = make(chan poolElementSlice, 100)
 
-func (s *sliceStack) Push(v *uniqueInterval) {
+func (s *PooledSliceStack) Push(v interface{}) {
 	// Get a buffer from the pool if available
 	if s.data == nil {
 		select {
@@ -29,13 +32,13 @@ func (s *sliceStack) Push(v *uniqueInterval) {
 			// Got a buffer, we're ok
 		default:
 			// No buffer free, alloc one of decent size
-			s.data = make(uniqueIntervalSlice, 0, 250)
+			s.data = make(poolElementSlice, 0, 250)
 		}
 	}
 	s.data = append(s.data, v)
 }
 
-func (s *sliceStack) Pop() (v *uniqueInterval) {
+func (s *PooledSliceStack) Pop() (v interface{}) {
 	if l := len(s.data) - 1; l == -1 {
 		return nil
 	} else {
@@ -54,11 +57,10 @@ func (s *sliceStack) Pop() (v *uniqueInterval) {
 			// Remove our reference
 			s.data = nil
 		}
-		s = nil
 		return
 	}
 }
 
-func (s *sliceStack) Len() int {
+func (s *PooledSliceStack) Len() int {
 	return len(s.data)
 }

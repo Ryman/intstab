@@ -206,13 +206,13 @@ func (ts *intStab) stab(q uint16) (results []*Interval, err error) {
 	results = make(IntervalSlice, finalLen)
 
 	for i := 0; i < finalLen; i++ {
-		results[i] = stack.Pop().interval
+		results[i] = stack.Pop().(*uniqueInterval).interval
 	}
 
 	return
 }
 
-func (ts *intStab) traverse(v *uniqueInterval, stack UniqueIntervalStack, q uint16) {
+func (ts *intStab) traverse(v *uniqueInterval, stack Stack, q uint16) {
 	stack.Push(v)
 
 	start := v.interval.Start
