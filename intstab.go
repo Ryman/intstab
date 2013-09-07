@@ -203,7 +203,7 @@ func (ts *intStab) stab(q uint16) (results []*Interval, err error) {
 	}
 
 	finalLen := stack.Len()
-	results = make([]*Interval, finalLen)
+	results = make(IntervalSlice, finalLen)
 
 	for i := 0; i < finalLen; i++ {
 		results[i] = stack.Pop().interval
@@ -212,7 +212,7 @@ func (ts *intStab) stab(q uint16) (results []*Interval, err error) {
 	return
 }
 
-func (ts *intStab) traverse(v *uniqueInterval, stack Stack, q uint16) {
+func (ts *intStab) traverse(v *uniqueInterval, stack UniqueIntervalStack, q uint16) {
 	stack.Push(v)
 
 	start := v.interval.Start

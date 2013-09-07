@@ -19,7 +19,7 @@ func TestBasicQuery(t *testing.T) {
 	}
 
 	if len(results) != 1 {
-		t.Error("Wrong number of results for Intersect")
+		t.Fatal("Wrong number of results for Intersect")
 	}
 
 	if results[0].Tag != "Second" {
@@ -148,4 +148,37 @@ func TestOptimalTime(t *testing.T) {
 	// Show that a query with y results is similar to time x
 
 	// Show that y < 2y < 4y results
+}
+
+func TestGarbageCreation(t *testing.T) {
+	// Test intervals
+	intervals := IntervalSlice{
+		{4, 15, "First"},
+		{50, 72, "Second"},
+		{34, 90, "Third"},
+		{34, 45, "Fourth"},
+		{34, 40, "Fifth"},
+		{34, 34, "Sixth"},
+		{34, 45, "Seventh"},
+	}
+
+	ts, err := NewIntervalStabber(intervals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		results, err := ts.Intersect(42)
+		if err != nil {
+			t.Fatal("Error during alloc run: ", err)
+		}
+
+		if results == nil {
+			t.Fatal("Got 'nil' results during alloc run")
+		}
+	})
+
+	//if (allocs > len(results))
+	t.Log("Allocs per run (avg): ", allocs)
+	t.Fatal()
 }
