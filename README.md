@@ -12,8 +12,8 @@ in o(1+k) time where k is the result set size. The output will be ordered.
 Example usage:
 
     intervals := IntervalSlice{
-		  {4, 15, "First"},
-		  {50, 72, "Second"},
+		{4, 15, "First"},
+		{50, 72, "Second"},
   		{34, 90, "Third"},
   		{34, 45, "Fourth"},
   		{34, 40, "Fifth"},
@@ -22,13 +22,13 @@ Example usage:
   	}
 
     // Initialise
-	  ts, _ := NewIntervalStabber(intervals)
+	ts, _ := NewIntervalStabber(intervals)
 
     // Query for intervals intersecting 42
-	  results, _ := ts.Intersect(42)
+	results, _ := ts.Intersect(42)
 	  
-	  // Results should be:
-	  // [0].Tag = "Fourth"
-	  // [1].Tag = "Seventh"
-	  // [2].Tag = "Third"
+	// Results should be:
+	// [0].Tag = "Fourth"
+	// [1].Tag = "Seventh"
+	// [2].Tag = "Third"
 
