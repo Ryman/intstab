@@ -4,31 +4,52 @@ import (
 	"testing"
 )
 
+func dependOn(t *testing.T, deps ...func(*testing.T)) {
+	for _, dependancy := range deps {
+		dependancy(t)
+
+		if t.Skipped() || t.Failed() {
+			t.Skip("Dependency failed, Skipping.")
+		}
+	}
+}
+
+func checkExpected(t *testing.T, stab IntervalStabber, query uint16, expected ...interface{}) {
+	actual, err := stab.Intersect(query)
+	if err != nil {
+		t.Fatalf("Error performing query: %v", err)
+	}
+
+	t.Log("Results:")
+	for _, v := range actual {
+		t.Log(v.Tag, " ")
+	}
+	t.Log("Expected:\n", expected)
+
+	if l, x := len(actual), len(expected); l != x {
+		t.Fatalf("Results were not expected length: Got %v but wanted %v", l, x)
+	}
+
+	for i, x := range expected {
+		if actual[i].Tag != x {
+			t.Errorf("Missing %s from results", x)
+		}
+	}
+}
+
+func setup(t *testing.T, intervals IntervalSlice) (stab IntervalStabber) {
+	stab, err := NewIntervalStabber(intervals)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	return
+}
+
 func TestBasicQuery(t *testing.T) {
-	// Test intervals
 	intervals := IntervalSlice{{4, 15, "First"}, {34, 72, "Second"}}
+	stab := setup(t, intervals)
 
-	ts, err := NewIntervalStabber(intervals)
-	if err != nil {
-		t.Fatal("Unexpected error: ", err)
-	}
-
-	results, err := ts.Intersect(45)
-	if err != nil {
-		t.Fatalf("Incorrect")
-	}
-
-	if len(results) != 1 {
-		t.Fatal("Wrong number of results for Intersect")
-	}
-
-	if results[0].Tag != "Second" {
-		t.Error("Wrong result from Intersect")
-	}
-
-	if t.Failed() {
-		t.Log("Results were: ", results)
-	}
+	checkExpected(t, stab, 45, "Second")
 }
 
 func TestNoResultsQuery(t *testing.T) {
@@ -40,32 +61,31 @@ func TestNoResultsQuery(t *testing.T) {
 		{34, 40, "Fifth"},
 		{34, 34, "Sixth"},
 		{34, 45, "Seventh"},
+		{0, 142, "Zero is cool"},
+		{6000, 65535, "So is 65535"},
 	}
 
-	ts, err := NewIntervalStabber(intervals)
-	if err != nil {
-		t.Fatal("Unexpected error: ", err)
-	}
+	stab := setup(t, intervals)
 
 	// Check we can query zero
-	results, err := ts.Intersect(0)
-	if err != nil {
-		t.Fatal("Unexpected error: ", err)
-	}
-
-	if len(results) > 0 {
-		t.Error("Unexpected results: ", results)
-	}
+	checkExpected(t, stab, 0, "Zero is cool")
 
 	// Check we can query maxUint16
-	results, err = ts.Intersect(65535)
-	if err != nil {
-		t.Fatal("Unexpected error: ", err)
+	// TODO: Fix this
+	checkExpected(t, stab, 65535, "So is 65535")
+}
+
+func TestSmallOverlappingIntervals(t *testing.T) {
+	intervals := IntervalSlice{
+		{995, 995, "Copy"},
+		{994, 995, "Another"},
+		{995, 995, "Singular"},
+		{989, 995, "Seventh"},
 	}
 
-	if len(results) > 0 {
-		t.Error("Unexpected results: ", results)
-	}
+	stab := setup(t, intervals)
+	// TODO: Fix this
+	checkExpected(t, stab, 995, "Seventh", "Another", "Copy", "Singular")
 }
 
 func TestMultipleResultsQuery(t *testing.T) {
@@ -80,38 +100,9 @@ func TestMultipleResultsQuery(t *testing.T) {
 		{34, 45, "Seventh"},
 	}
 
-	ts, err := NewIntervalStabber(intervals)
-	if err != nil {
-		t.Fatal(err)
-	}
+	stab := setup(t, intervals)
 
-	results, err := ts.Intersect(42)
-	if err != nil {
-		t.Fatal("Unexpected error: ", err)
-	}
-
-	if len(results) != 3 {
-		t.Fatal("Wrong number of results for Intersect: %v", results)
-	}
-
-	if results[0].Tag != "Fourth" {
-		// Ensure the resultant ordering is ordered by leftmost interval.Start
-		t.Error("Wrong result from Intersect")
-	}
-
-	if results[1].Tag != "Seventh" {
-		// Ensure we get multiple different results for the same range
-		// We also need to ensure the ordering is the same as it went in
-		t.Error("Missing an overlapping range for Intersect")
-	}
-
-	if results[2].Tag != "Third" {
-		t.Error("Wrong result from Intersect")
-	}
-
-	if t.Failed() {
-		t.Log("Results were: ", results)
-	}
+	checkExpected(t, stab, 42, "Fourth", "Seventh", "Third")
 }
 
 func TestIntervalBadRange(t *testing.T) {
@@ -151,6 +142,9 @@ func TestOptimalTime(t *testing.T) {
 }
 
 func TestGarbageCreation(t *testing.T) {
+	// TestMultipleResultsQuery needs to work as expected
+	dependOn(t, TestMultipleResultsQuery)
+
 	// Test intervals
 	intervals := IntervalSlice{
 		{4, 15, "First"},
@@ -162,13 +156,10 @@ func TestGarbageCreation(t *testing.T) {
 		{34, 45, "Seventh"},
 	}
 
-	ts, err := NewIntervalStabber(intervals)
-	if err != nil {
-		t.Fatal(err)
-	}
+	stab := setup(t, intervals)
 
 	allocs := testing.AllocsPerRun(1000, func() {
-		results, err := ts.Intersect(42)
+		results, err := stab.Intersect(42)
 		if err != nil {
 			t.Fatal("Error during alloc run: ", err)
 		}
@@ -179,7 +170,7 @@ func TestGarbageCreation(t *testing.T) {
 	})
 
 	t.Log("Allocs per run (avg): ", allocs)
-	if allocs > 2.5 {
+	if allocs > 2.1 {
 		t.Fatal("Too many allocs, be sure to disable logging for real builds")
 	}
 }

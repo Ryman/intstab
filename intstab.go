@@ -4,7 +4,7 @@ package intstab
 import (
 	"container/list"
 	"fmt"
-	"log"
+	//"log"
 	"math"
 	"sort"
 )
@@ -84,7 +84,7 @@ func (ts *intStab) precompute() {
 	lmap := make(map[int]*list.Element)
 
 	// Use a sweep line to build the tree in O(n)
-	for q := uint16(0); q < maxN-1; q++ {
+	for q := 0; q < maxN; q++ {
 		if v := l.Back(); v != nil {
 			starts[q] = v.Value.(*uniqueInterval)
 		}
@@ -94,7 +94,9 @@ func (ts *intStab) precompute() {
 			a := events[q][i]
 
 			// Rightmost left
-			if a.interval.Start == q {
+			if int(a.interval.Start) == q &&
+				(starts[q] == nil ||
+					starts[q].id != a.id) { // Catch single ranges e.g. 45-45
 				starts[q] = a
 				// Save link to position in L
 				lmap[a.id] = l.PushBack(a)
@@ -150,15 +152,15 @@ func (ts *intStab) buildEvents() []uniqueIntervalSlice {
 func (ts *intStab) precomputeSmaller() {
 	sm := make([]uniqueIntervalSlice, maxN)
 
-	//log.Printf("Intervals %v", ts.intervals)
 	for _, a := range ts.intervals {
 		sm[a.interval.Start] = append(sm[a.interval.Start], a)
 	}
 
 	// sort Q elements by length
-	for _, arr := range sm {
+	for i, arr := range sm {
 		if len(arr) > 1 {
 			sort.Sort(arr)
+
 			// remove the longest one (it should be the last one)
 			arr = arr[:len(arr)-1]
 
@@ -168,8 +170,11 @@ func (ts *intStab) precomputeSmaller() {
 			}
 		} else if len(arr) == 1 {
 			// There was only one, it's the longest so just remove and ignore
-			arr = arr[:0]
+			arr = nil //arr[:0]
 		}
+
+		// Update pointer
+		sm[i] = arr
 	}
 
 	ts.smaller = sm
@@ -217,12 +222,13 @@ func (ts *intStab) traverse(v *uniqueInterval, stack Stack, q uint16) {
 
 	start := v.interval.Start
 	// Iterate over ts.smaller from largest to smallest
+	// TODO: This depends on length of smaller, indexing into it could be useful
 	for i := len(ts.smaller[start]) - 1; i >= 0; i-- {
 		w := ts.smaller[start][i]
 
 		// Skip any interval larger than the current stabbed
 		// it should already be in the stabbed list
-		if w.interval.End >= v.interval.End {
+		if w.interval.End > v.interval.End {
 			continue
 		}
 
@@ -246,9 +252,9 @@ func (ts *intStab) traverse(v *uniqueInterval, stack Stack, q uint16) {
 
 	// Find thyself
 	// TODO: Make this O(1), haven't seen it get too high yet though
-	if len := children.Len(); len > 2 {
-		log.Print(children.Len())
-	}
+	//if len := children.Len(); len > 2 {
+	//log.Print("intStab: [WARN] High Children Count: ", children.Len())
+	//}
 
 	var e *list.Element
 	for e = children.Back(); e != nil; e = e.Prev() {
