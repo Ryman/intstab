@@ -174,3 +174,55 @@ func TestGarbageCreation(t *testing.T) {
 		t.Fatal("Too many allocs, be sure to disable logging for real builds")
 	}
 }
+
+func BenchmarkLargeQuery(b *testing.B) {
+	intervals := IntervalSlice{
+		{4, 15, "First"},
+		{50, 72, "Second"},
+		{34, 90, "Third"},
+		{34, 45, "Fourth"},
+		{34, 40, "Fifth"},
+		{34, 34, "Sixth"},
+		{34, 45, "Seventh"},
+	}
+	// Make a result for every q
+	for i := 0; i < 65535; i++ {
+		intervals = append(intervals, &Interval{uint16(i), uint16(i), i})
+	}
+
+	stab, err := NewIntervalStabber(intervals)
+	if err != nil {
+		b.Fatalf("Unable to setup benchmark: ", err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		results, err := stab.Intersect(42)
+		if err != nil || len(results) != 4 {
+			b.Fatal("Tests failed during benchmark")
+		}
+	}
+}
+
+func BenchmarkQuery(b *testing.B) {
+	intervals := IntervalSlice{
+		{4, 15, "First"},
+		{50, 72, "Second"},
+		{34, 90, "Third"},
+		{34, 45, "Fourth"},
+		{34, 40, "Fifth"},
+		{34, 34, "Sixth"},
+		{34, 45, "Seventh"},
+	}
+
+	stab, err := NewIntervalStabber(intervals)
+	if err != nil {
+		b.Fatalf("Unable to setup benchmark: ", err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		results, err := stab.Intersect(42)
+		if err != nil || len(results) != 3 {
+			b.Fatal("Tests failed during benchmark")
+		}
+	}
+}

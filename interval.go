@@ -47,6 +47,10 @@ func (i Interval) Stab(q uint16) bool {
 type uniqueInterval struct {
 	interval *Interval
 	id       int
+	// Optimizations
+	nextSmaller *uniqueInterval
+	leftSibling *uniqueInterval
+	parent      *uniqueInterval
 }
 
 func (i Interval) isValid() (ok bool, err error) {

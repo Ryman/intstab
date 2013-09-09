@@ -4,7 +4,6 @@ package intstab
 import (
 	"container/list"
 	"fmt"
-	//"log"
 	"math"
 	"sort"
 )
@@ -20,16 +19,15 @@ func (ts *intStab) Intersect(query uint16) (results []*Interval, err error) {
 	return ts.stab(query)
 }
 
-func NewIntervalStabber(intervals IntervalSlice) (IntervalStabber, error) {
-	ts := new(intStab)
-	err := error(nil)
+func NewIntervalStabber(intervals IntervalSlice) (ts IntervalStabber, err error) {
+	ts = new(intStab)
+	err = ts.(*intStab).init(intervals)
 
-	err = ts.init(intervals)
 	if err != nil {
-		return nil, err
+		ts = nil
 	}
 
-	return ts, err
+	return
 }
 
 /*
@@ -45,31 +43,23 @@ const maxN = math.MaxUint16 + 1
 type intStab struct {
 	root      *uniqueInterval
 	intervals map[int]*uniqueInterval
-	children  map[int]*list.List
-	parents   map[int]*uniqueInterval
-
-	smaller []uniqueIntervalSlice
-	starts  uniqueIntervalSlice
+	starts    uniqueIntervalSlice
 }
 
 func (ts *intStab) init(intervals IntervalSlice) (err error) {
 	n := len(intervals)
 	ts.intervals = make(map[int]*uniqueInterval, n)
-	ts.parents = make(map[int]*uniqueInterval, n)
-	ts.children = make(map[int]*list.List, n+1) // include space for root's children
 
 	for id, val := range intervals {
 		if _, err = val.isValid(); err != nil {
 			return
 		}
 
-		ts.intervals[id] = &uniqueInterval{val, id}
-		ts.children[id] = list.New()
+		ts.intervals[id] = &uniqueInterval{interval: val, id: id}
 	}
 
 	// Root is id(-1)
-	ts.root = &uniqueInterval{&Interval{}, -1}
-	ts.children[ts.root.id] = list.New()
+	ts.root = &uniqueInterval{interval: &Interval{}, id: -1}
 
 	ts.precompute()
 	return
@@ -79,6 +69,7 @@ func (ts *intStab) precompute() {
 	ts.precomputeSmaller()
 	events := ts.buildEvents()
 	starts := make(uniqueIntervalSlice, maxN)
+	children := make(map[int]*list.List, len(ts.intervals)) // include space for root's children
 
 	l := list.New()
 	lmap := make(map[int]*list.Element)
@@ -112,8 +103,16 @@ func (ts *intStab) precompute() {
 					parent = ts.root
 				}
 
-				ts.parents[a.id] = parent
-				ts.children[parent.id].PushBack(a)
+				// Calculate siblings
+				if kids := children[parent.id]; kids == nil {
+					children[parent.id] = list.New()
+				} else if leftChild := kids.Front(); leftChild != nil {
+
+					a.leftSibling = leftChild.Value.(*uniqueInterval)
+				}
+
+				a.parent = parent
+				children[parent.id].PushBack(a)
 
 				l.Remove(e)
 			}
@@ -158,53 +157,42 @@ func (ts *intStab) precomputeSmaller() {
 
 	// sort Q elements by length
 	for i, arr := range sm {
-		if len(arr) > 1 {
+		if l := len(arr); l > 1 {
+			// More than one interval with same start, link them together
+			// and keep the longest. Remove all the rest from interval list
 			sort.Sort(arr)
 
 			// remove the longest one (it should be the last one)
-			arr = arr[:len(arr)-1]
+			// set it's nextSmaller before removing
+			arr[l-1].nextSmaller = arr[l-2]
+			arr = arr[:l-1]
 
 			// Remove each remaining item from the intervals map
-			for _, x := range arr {
+			for i, x := range arr {
+				if i == 0 {
+					x.nextSmaller = nil
+				} else {
+					x.nextSmaller = arr[i-1]
+				}
 				delete(ts.intervals, x.id)
 			}
-		} else if len(arr) == 1 {
-			// There was only one, it's the longest so just remove and ignore
-			arr = nil //arr[:0]
 		}
 
-		// Update pointer
-		sm[i] = arr
+		sm[i] = nil
 	}
-
-	ts.smaller = sm
 }
 
 func (ts *intStab) stab(q uint16) (results []*Interval, err error) {
 	if ts.starts == nil {
-		err = fmt.Errorf("Need to initialise before querying")
+		return nil, fmt.Errorf("Need to initialise before querying")
 	} else if len(ts.starts) <= int(q) {
-		err = fmt.Errorf("Query is out of range")
-	}
-
-	if err != nil {
-		return
-	}
-
-	x := ts.starts[q]
-	if x == nil || x.interval == nil {
-		return
+		return nil, fmt.Errorf("Query is out of range")
 	}
 
 	stack := NewStack()
 
-	for {
+	for x := ts.starts[q]; x != nil && x.id != ts.root.id; x = x.parent {
 		ts.traverse(x, stack, q)
-		x = ts.parents[x.id]
-
-		if x == nil || x.id == ts.root.id {
-			break
-		}
 	}
 
 	finalLen := stack.Len()
@@ -220,58 +208,22 @@ func (ts *intStab) stab(q uint16) (results []*Interval, err error) {
 func (ts *intStab) traverse(v *uniqueInterval, stack Stack, q uint16) {
 	stack.Push(v)
 
-	start := v.interval.Start
 	// Iterate over ts.smaller from largest to smallest
-	// TODO: This depends on length of smaller, indexing into it could be useful
-	for i := len(ts.smaller[start]) - 1; i >= 0; i-- {
-		w := ts.smaller[start][i]
-
-		// Skip any interval larger than the current stabbed
-		// it should already be in the stabbed list
-		if w.interval.End > v.interval.End {
-			continue
-		}
-
-		// Check for intersection, we know q intersects something longer
-		// If it doesn't, then no need to check smaller ones
+	for w := v.nextSmaller; w != nil; w = w.nextSmaller {
 		if w.interval.End < q {
 			break
 		}
-		stack.Push(w) // Else, Add to stack
+		stack.Push(w)
 	}
 
 	/* Calculate rightmost path:
 	* The rightmost path R(v) of a node v ∈ V (S) is empty if v has no left
 	* sibling or its left sibling w is not stabbed. Otherwise, R(v) is the
 	* path from w to the rightmost stabbed node in the subtree of w in S. */
-	parent := ts.parents[v.id]
-	if parent == nil {
-		parent = ts.root
-	}
-	children := ts.children[parent.id]
-
-	// Find thyself
-	// TODO: Make this O(1), haven't seen it get too high yet though
-	//if len := children.Len(); len > 2 {
-	//log.Print("intStab: [WARN] High Children Count: ", children.Len())
-	//}
-
-	var e *list.Element
-	for e = children.Back(); e != nil; e = e.Prev() {
-		// do something with e.Value
-		if e.Value.(*uniqueInterval).id == v.id {
-			break
-		}
-	}
-
-	if e == nil {
-		return
-	}
-
-	// Check left siblings until they don't stab
-	for e = e.Prev(); e != nil; e = e.Prev() {
-		if w := e.Value.(*uniqueInterval); w.Stab(q) {
-			ts.traverse(w, stack, q)
+	for next := v.leftSibling; next != nil; next = next.leftSibling {
+		// Check left siblings until they don't stab
+		if next.Stab(q) {
+			ts.traverse(next, stack, q)
 		} else {
 			break
 		}
